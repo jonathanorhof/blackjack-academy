@@ -25,16 +25,18 @@
 
   HOW TO PLAY
     Click chips to bet, then Deal.
-    Keyboard: H = Hit, S = Stand, D = Double, P = Split, Enter/Space = Deal.
+    Keyboard: H = Hit, S = Stand, D = Double, P = Split, R = Surrender,
+    Enter/Space = Deal.
 
   HOW TO MODIFY
     - Table rules / bankroll / speed ......... CONFIG object (top of <script>)
     - Basic strategy matrix .................. HARD / SOFT / PAIR tables
         One string per row, 10 characters = dealer up-card 2,3,4,5,6,7,8,9,10,A
         H = Hit, S = Stand, D = Double (else Hit), T = Double (else Stand),
+        R = Surrender (else Hit),
         Y/N = split / don't split (PAIR table only)
         NOTE: the shipped matrix is for 4–8 decks, dealer STANDS on soft 17,
-        double after split allowed, no surrender. If you change the rules in
+        double after split allowed, late surrender. If you change the rules in
         CONFIG, update the matrix to match.
     - Sounds ................................. Sound object
     - Look & feel ............................ CSS variables in :root
@@ -44,7 +46,8 @@
     Dealer stands on all 17s (S17), peeks for blackjack on Ace / ten.
     Blackjack pays 3:2. Double on any two cards, double after split allowed.
     Split up to 4 hands; split Aces receive one card each and cannot be re-split.
-    No surrender, no insurance (basic strategy never takes insurance).
+    Late surrender (first two cards, not after a split): lose half the bet.
+    No insurance (basic strategy never takes insurance).
 ==============================================================================
 -->
 <style>
@@ -54,7 +57,7 @@
   --bg:#07130e; --panel:#0e1f18; --panel-2:#142a21; --line:#24443a;
   --text:#eef3ef; --muted:#93aa9f;
   --ok:#3ddc84; --bad:#ff5a5f;
-  --cH:#c0392b; --cS:#d4a017; --cD:#2e7dd1; --cT:#1ba39c; --cP:#2f9e4f;
+  --cH:#c0392b; --cS:#d4a017; --cD:#2e7dd1; --cT:#1ba39c; --cP:#2f9e4f; --cR:#8553b3;
   --cw:clamp(62px,6.4vw,98px);   /* card width */
   --cs:46px;                     /* chip size  */
 }
@@ -136,6 +139,7 @@ main{flex:1;display:flex;min-height:0}
 .result.win,.result.blackjack{background:linear-gradient(#f5dc8f,#c9a548);color:#231a02}
 .result.lose,.result.bust{background:#8f1d25;color:#fff}
 .result.push{background:#44524c;color:#fff}
+.result.surrender{background:#6a3f93;color:#fff}
 .betspot{display:flex;align-items:center;gap:8px;min-height:calc(var(--cs) + 22px)}
 .spot-ring{width:calc(var(--cs) + 26px);height:calc(var(--cs) + 26px);border-radius:50%;border:2px dashed rgba(232,198,110,.55);
   display:grid;place-items:end center;padding-bottom:11px}
@@ -145,7 +149,7 @@ main{flex:1;display:flex;min-height:0}
 .card{width:var(--cw);height:calc(var(--cw)*1.4);flex:none;perspective:800px;margin-left:calc(var(--cw)*-.6)}
 .card:first-child{margin-left:0}
 .card.dbl{--rest:rotate(90deg);transform:rotate(90deg);margin-left:calc(var(--cw)*-.35)}  /* double-down card lies sideways */
-.card.deal{animation:deal .6s cubic-bezier(.2,.75,.3,1) both}
+.card.deal{animation:deal .5s cubic-bezier(.2,.75,.3,1) both}
 @keyframes deal{from{transform:translate(var(--dx),var(--dy)) rotate(-28deg) scale(.85);opacity:.15}to{transform:var(--rest,none);opacity:1}}
 .card-inner{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.4,.1,.2,1)}
 .card.facedown .card-inner{transform:rotateY(180deg)}
@@ -195,6 +199,7 @@ button.chip:active{transform:translateY(1px)}
 .btn:disabled{opacity:.3;cursor:not-allowed}
 .btn.hit{background:linear-gradient(#d6493b,#a32a1f)} .btn.stand{background:linear-gradient(#e0ae22,#a87c06)}
 .btn.double{background:linear-gradient(#3b8de0,#1f5fa8)} .btn.split{background:linear-gradient(#37b05b,#1f7a3a)}
+.btn.surrender{background:linear-gradient(#9a6cc4,#6a3f93)}
 .btn.deal{background:linear-gradient(#f1d483,#c9a548);color:#231a02}
 .btn.ghost{background:#17352a;min-width:0;font-size:12px;padding:10px 14px}
 .feedback{position:absolute;top:-34px;left:50%;transform:translateX(-50%);padding:5px 16px;border-radius:999px;font-weight:700;
@@ -218,7 +223,7 @@ body.test .chart-panel{display:none}
 .strat th{font-weight:600;color:#c9d8d0;background:#132920;border-radius:3px;height:19px}
 .strat th:first-child{width:50px}
 .strat td{text-align:center;font-weight:800;color:#fff;border-radius:3px;height:19px;opacity:.82;transition:.15s}
-.c-H{background:var(--cH)} .c-S{background:var(--cS);color:#241a00!important} .c-D{background:var(--cD)} .c-T{background:var(--cT)} .c-P{background:var(--cP)}
+.c-H{background:var(--cH)} .c-S{background:var(--cS);color:#241a00!important} .c-D{background:var(--cD)} .c-T{background:var(--cT)} .c-P{background:var(--cP)} .c-R{background:var(--cR)}
 .strat.focus td{opacity:.3}
 .strat.focus .hl-row td,.strat.focus td.hl-col{opacity:.75}
 .strat.focus tr.hl-row th,.strat th.hl-col{background:var(--gold);color:#231a02}
@@ -282,8 +287,9 @@ body.test .chart-panel{display:none}
   .hand .result{font-size:11px;padding:2px 8px}
   .controls{height:auto;min-height:124px;margin-top:6px}
   .ctrl-group{flex-wrap:wrap;justify-content:center;gap:8px;width:100%}
-  #actionControls{display:grid;grid-template-columns:1fr 1fr}
-  #actionControls .btn{min-width:0;padding:16px 8px;font-size:16px}
+  #actionControls{display:grid;grid-template-columns:repeat(6,1fr)}   /* row 1: hit, stand · row 2: double, split, surrender */
+  #actionControls .btn{min-width:0;padding:16px 4px;font-size:13px;letter-spacing:.3px;grid-column:span 2}
+  #actionControls .btn.hit,#actionControls .btn.stand{grid-column:span 3;font-size:16px;letter-spacing:.8px}
   #betControls .btn.deal{flex:1 1 100%;padding:14px}
   /* strategy chart becomes a drop-down drawer; action buttons stay reachable below it */
   .chart-panel{position:fixed;top:0;left:0;right:0;width:auto;max-height:calc(100dvh - 150px);z-index:40;border-left:0;
@@ -360,13 +366,14 @@ body.test .chart-panel{display:none}
         <button class="btn stand" data-a="stand">Stand<kbd>S</kbd></button>
         <button class="btn double" data-a="double">Double<kbd>D</kbd></button>
         <button class="btn split" data-a="split">Split<kbd>P</kbd></button>
+        <button class="btn surrender" data-a="surrender">Surrender<kbd>R</kbd></button>
       </div>
     </div>
   </section>
 
   <aside class="chart-panel" id="chartPanel">
     <h2>Basic Strategy</h2>
-    <div class="sub">4–8 decks · dealer stands on soft 17 · double after split</div>
+    <div class="sub">4–8 decks · dealer stands on soft 17 · double after split · late surrender</div>
     <div class="chart-head">
       <div class="hint" id="hint">Deal a hand — the chart will light up the correct play.</div>
       <button class="chart-close" id="chartClose">Close ▴</button>
@@ -375,7 +382,7 @@ body.test .chart-panel{display:none}
     <div class="legend">
       <span><i class="c-H">H</i>Hit</span><span><i class="c-S">S</i>Stand</span>
       <span><i class="c-D">D</i>Double, else hit</span><span><i class="c-T">Ds</i>Double, else stand</span>
-      <span><i class="c-P">P</i>Split</span>
+      <span><i class="c-P">P</i>Split</span><span><i class="c-R">R</i>Surrender, else hit</span>
     </div>
   </aside>
 </main>
@@ -395,13 +402,13 @@ const CONFIG = {
   MAX_BET: 500,
   MAX_HANDS: 4,             // max hands after splitting
   BLACKJACK_PAYOUT: 1.5,    // 3:2
-  DEAL_DELAY: 750           // ms between dealt cards (one card at a time)
+  DEAL_DELAY: 550           // ms between dealt cards (one card at a time)
 };
 
 /* ============================================================================
-   BASIC STRATEGY MATRIX  (4–8 decks, S17, DAS, no surrender)
+   BASIC STRATEGY MATRIX  (4–8 decks, S17, DAS, late surrender)
    Columns = dealer up-card: 2 3 4 5 6 7 8 9 10 A
-   H hit · S stand · D double else hit · T double else stand · Y/N split
+   H hit · S stand · D double else hit · T double else stand · R surrender else hit · Y/N split
    ========================================================================== */
 const DEALER_COLS = ['2','3','4','5','6','7','8','9','10','A'];
 const HARD = {            // key = hard total (8 means "8 or less", 17 means "17+")
@@ -412,8 +419,8 @@ const HARD = {            // key = hard total (8 means "8 or less", 17 means "17
   12:'HHSSSHHHHH',
   13:'SSSSSHHHHH',
   14:'SSSSSHHHHH',
-  15:'SSSSSHHHHH',
-  16:'SSSSSHHHHH',
+  15:'SSSSSHHHRH',        // surrender 15 vs 10
+  16:'SSSSSHHRRR',        // surrender 16 vs 9, 10, A (a pair of 8s is split instead)
   17:'SSSSSSSSSS'
 };
 const SOFT = {            // key = soft total (A counted as 11)
@@ -439,7 +446,7 @@ const PAIR = {            // key = value of one card of the pair (11 = Ace)
    3:'YYYYYYNNNN',
    2:'YYYYYYNNNN'
 };
-const ACTION_NAME = {hit:'Hit', stand:'Stand', double:'Double', split:'Split'};
+const ACTION_NAME = {hit:'Hit', stand:'Stand', double:'Double', split:'Split', surrender:'Surrender'};
 const clamp = (x,a,b) => Math.min(Math.max(x,a),b);
 
 /** Best total of a hand and whether an Ace is still counted as 11 (soft). */
@@ -460,7 +467,7 @@ function totalCode(total, soft, col){
  * Returns the correct action given what the rules currently allow, plus the
  * chart cells to highlight.
  */
-function lookup(cards, upCard, canDouble, canSplit){
+function lookup(cards, upCard, canDouble, canSplit, canSurrender){
   const col = upCard.value === 11 ? 9 : upCard.value - 2;
   const {total, soft} = handValue(cards);
   const isPair = cards.length === 2 && cards[0].value === cards[1].value;
@@ -480,8 +487,9 @@ function lookup(cards, upCard, canDouble, canSplit){
   let action, fallback = false;
   if (code === 'H') action = 'hit';
   else if (code === 'S') action = 'stand';
+  else if (code === 'R'){ if (canSurrender) action = 'surrender'; else { fallback = 'surrender'; action = 'hit'; } }
   else if (canDouble) action = 'double';
-  else { fallback = true; action = code === 'D' ? 'hit' : 'stand'; }
+  else { fallback = 'double'; action = code === 'D' ? 'hit' : 'stand'; }
   hl.push({t:table, row, col});
   return {action, code, hl, total, soft, isPair, col, fallback, splitDenied};
 }
@@ -510,6 +518,9 @@ function whyText(rec, cards, upCard){
       else txt = 'Two fresh hands starting from this card perform better than the weak total you are holding.';
       break;
     }
+    case 'surrender':
+      txt = 'Played out, this hand loses more than half the bet on average. Giving up half now is the cheaper option.';
+      break;
     case 'double':
       txt = soft
         ? 'A soft hand cannot bust with one card and the dealer is showing a weak card — press the advantage with twice the bet.'
@@ -526,7 +537,7 @@ function whyText(rec, cards, upCard){
       else if (total === 12 && up <= 3) txt = 'Only a ten-value card busts 12, and a dealer 2 or 3 is not weak enough to stand against.';
       else txt = 'A dealer showing 7 or higher will usually finish on 17+. Standing on a stiff hand loses too often — you must try to improve.';
   }
-  if (rec.fallback) txt += ' (The chart says Double, but doubling is not available now, so ' + ACTION_NAME[rec.action] + ' is next best.)';
+  if (rec.fallback) txt += ' (The chart says ' + ACTION_NAME[rec.fallback] + ', but that is not available now, so ' + ACTION_NAME[rec.action] + ' is next best.)';
   if (rec.splitDenied) txt += ' (The chart says Split, but splitting is not available now.)';
   return txt;
 }
@@ -626,10 +637,12 @@ const state = {
 function newSession(){
   state.session = {length: +$('#sessionLen').value, rounds: 0, decisions: 0, correct: 0, streak: 0, best: 0, net: 0, mistakes: []};
 }
-const newHand = bet => ({cards: [], bet, done: false, busted: false, blackjack: false, splitAces: false, doubled: false, hidden: false, result: null, el: null});
+const newHand = bet => ({cards: [], bet, done: false, busted: false, blackjack: false, splitAces: false, doubled: false, hidden: false, surrendered: false, result: null, el: null});
 const curHand = () => state.hands[state.active];
 
 function canDouble(h){ return h.cards.length === 2 && !h.splitAces && state.bankroll >= h.bet; }
+/** Late surrender: first decision of the round only, never after a split. */
+function canSurrender(h){ return h.cards.length === 2 && state.hands.length === 1; }
 function canSplit(h){
   return h.cards.length === 2 && h.cards[0].value === h.cards[1].value && !h.splitAces &&
          state.hands.length < CONFIG.MAX_HANDS && state.bankroll >= h.bet;
@@ -723,7 +736,7 @@ function refreshUI(){
   $('#actionControls').classList.toggle('hidden', state.phase === 'betting');
   for (const b of document.querySelectorAll('#actionControls .btn')){
     const a = b.dataset.a;
-    b.disabled = !playing || state.busy || !h || (a === 'double' && !canDouble(h)) || (a === 'split' && !canSplit(h));
+    b.disabled = !playing || state.busy || !h || (a === 'double' && !canDouble(h)) || (a === 'split' && !canSplit(h)) || (a === 'surrender' && !canSurrender(h));
   }
   $('#dealBtn').disabled = state.busy;
   $('#sBank').textContent = money(state.bankroll);
@@ -758,7 +771,7 @@ function highlightChart(){
     if (state.phase !== 'player') $('#hint').innerHTML = 'Deal a hand — the chart will light up the correct play.';
     return;
   }
-  const up = state.dealer.cards[0], rec = lookup(h.cards, up, canDouble(h), canSplit(h));
+  const up = state.dealer.cards[0], rec = lookup(h.cards, up, canDouble(h), canSplit(h), canSurrender(h));
   for (const {t, row, col} of rec.hl){
     const tbl = document.querySelector(`.strat[data-t="${t}"]`), tr = tbl.querySelector(`tr[data-row="${row}"]`);
     if (!tr) continue;
@@ -769,7 +782,7 @@ function highlightChart(){
     tr.scrollIntoView({block:'nearest'});
   }
   $('#hint').innerHTML = `${describeHand(h.cards)} vs dealer ${up.rank} → <b>${ACTION_NAME[rec.action].toUpperCase()}</b>` +
-    (rec.fallback ? ' <small>(double not available)</small>' : '') + (rec.splitDenied ? ' <small>(split not available)</small>' : '');
+    (rec.fallback ? ` <small>(${rec.fallback} not available)</small>` : '') + (rec.splitDenied ? ' <small>(split not available)</small>' : '');
 }
 
 /* ---------- modal ---------- */
@@ -859,10 +872,11 @@ async function playerAction(action){
   if (state.phase !== 'player' || state.busy || !h) return;
   if (action === 'double' && !canDouble(h)) return;
   if (action === 'split' && !canSplit(h)) return;
+  if (action === 'surrender' && !canSurrender(h)) return;
   state.busy = true; refreshUI();
 
   const up = state.dealer.cards[0], s = state.session;
-  const rec = lookup(h.cards, up, canDouble(h), canSplit(h));
+  const rec = lookup(h.cards, up, canDouble(h), canSplit(h), canSurrender(h));
   const desc = `${describeHand(h.cards)} vs dealer ${up.rank}`;
   s.decisions++;
   if (rec.action === action){
@@ -897,6 +911,8 @@ async function playerAction(action){
     else if (t === 21) h.done = true;
   } else if (action === 'stand'){
     h.done = true;
+  } else if (action === 'surrender'){
+    h.surrendered = true; h.done = true;            // forfeit half the bet, hand is over
   } else if (action === 'double'){
     state.bankroll -= h.bet; h.bet *= 2; Sound.chip();
     drawStack(h.el.querySelector('.stack'), h.bet, true);
@@ -935,7 +951,7 @@ async function nextHand(){
 async function dealerTurn(){
   state.phase = 'dealer'; refreshUI();
   await revealHole();
-  if (state.hands.some(h => !h.busted)){
+  if (state.hands.some(h => !h.busted && !h.surrendered)){
     // Dealer draws to 17 and stands on ALL 17s, including soft 17 (S17 rule)
     while (handValue(state.dealer.cards).total < 17) await dealDealer();
   }
@@ -958,7 +974,8 @@ async function settle(){
   for (const h of state.hands){
     const p = handValue(h.cards).total;
     let res, pay;                                   // pay = amount returned to bankroll (stake included)
-    if (h.busted){ res = 'lose'; pay = 0; }
+    if (h.surrendered){ res = 'surrender'; pay = h.bet / 2; }
+    else if (h.busted){ res = 'lose'; pay = 0; }
     else if (h.blackjack && !dealerBJ){ res = 'blackjack'; pay = h.bet * (1 + CONFIG.BLACKJACK_PAYOUT); anyBJ = true; }
     else if (h.blackjack && dealerBJ){ res = 'push'; pay = h.bet; }
     else if (dealerBJ){ res = 'lose'; pay = 0; }
@@ -969,8 +986,9 @@ async function settle(){
     const r = h.el.querySelector('.result');
     r.className = 'result ' + (h.busted ? 'bust' : res);
     r.textContent = h.busted ? 'BUST' : res === 'blackjack' ? `BLACKJACK +${money(pay - h.bet)}` :
-                    res === 'win' ? `WIN +${money(h.bet)}` : res === 'push' ? 'PUSH' : 'LOSE';
-    if (res !== 'push') h.el.querySelector('.stack').classList.add(res === 'lose' ? 'lose' : 'win');
+                    res === 'win' ? `WIN +${money(h.bet)}` : res === 'push' ? 'PUSH' :
+                    res === 'surrender' ? `SURRENDER ${money(-h.bet / 2)}` : 'LOSE';
+    if (res !== 'push') h.el.querySelector('.stack').classList.add(res === 'lose' || res === 'surrender' ? 'lose' : 'win');
   }
   const s = state.session; s.rounds++; s.net += net;
   if (anyBJ) Sound.blackjack(); else if (net > 0) Sound.win(); else if (net < 0) Sound.lose(); else Sound.push();
@@ -1022,11 +1040,12 @@ function showRules(){
        <li>${CONFIG.DECKS}-deck shoe, reshuffled when the cut card (${Math.round(CONFIG.PENETRATION * 100)} % penetration) is reached.</li>
        <li>Dealer stands on all 17s and peeks for blackjack. Blackjack pays 3:2.</li>
        <li>Double on any two cards, also after a split. Split up to ${CONFIG.MAX_HANDS} hands; split Aces get one card each.</li>
-       <li>No surrender, no insurance (basic strategy never takes insurance).</li>
+       <li>Late surrender on your first two cards (not after a split): give up the hand, lose half the bet.</li>
+       <li>No insurance (basic strategy never takes insurance).</li>
      </ul>
      <p><b>Learning mode</b> — the chart on the right highlights the correct play for your hand.</p>
      <p><b>Testing mode</b> — the chart is hidden. Every decision is graded; a wrong move pauses the game and explains the book play. A summary appears at the end of the session.</p>
-     <p><b>Keys</b> — H hit · S stand · D double · P split · Enter deal.</p>`);
+     <p><b>Keys</b> — H hit · S stand · D double · P split · R surrender · Enter deal.</p>`);
 }
 
 /* ============================================================================
@@ -1042,7 +1061,7 @@ document.addEventListener('keydown', e => {
     return;
   }
   if (e.target.tagName === 'SELECT') return;
-  const map = {h:'hit', s:'stand', d:'double', p:'split'};
+  const map = {h:'hit', s:'stand', d:'double', p:'split', r:'surrender'};
   if (map[k]) playerAction(map[k]);
   else if (k === 'enter' || k === ' '){ e.preventDefault(); deal(); }
 });
